@@ -1,5 +1,7 @@
 bin/
 obj/
 models/*.onnx
+publish/
+publish.zip
 *.user
 appsettings.Development.json
