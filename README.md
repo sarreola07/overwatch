@@ -44,6 +44,27 @@ whole system is demoable offline.
    feeds (state DOT traffic cameras publish JPEG endpoints). Keep `cam-3` broken
    on purpose — it demonstrates degraded-feed handling.
 
+## Demo from your phone or laptop (live device camera)
+
+The dashboard has a **GO LIVE** button that streams frames from the visitor's
+own camera through the same detection pipeline (browser → `/api/analyze` →
+Vision client). Frames are analyzed and discarded, never stored.
+
+To demo on other devices on your Wi-Fi:
+
+1. Run the server bound to all interfaces (the repo's launch config already does):
+   ```
+   dotnet run --urls "http://0.0.0.0:5170;https://0.0.0.0:5171"
+   ```
+2. Allow the ports through Windows Firewall once (admin PowerShell):
+   ```
+   New-NetFirewallRule -DisplayName "Overwatch" -Direction Inbound -Protocol TCP -LocalPort 5170,5171 -Action Allow
+   ```
+3. On the phone/laptop, open `https://<this-PC's-IP>:5171` (find the IP with
+   `ipconfig`). **Camera access requires HTTPS on iOS/Safari** — accept the
+   self-signed dev-certificate warning for the demo. A deployed App Service URL
+   has real TLS and no warning.
+
 ## Design decisions (the questions an engineer would ask)
 
 **Why poll instead of stream?** The sources only expose still JPEGs, and the

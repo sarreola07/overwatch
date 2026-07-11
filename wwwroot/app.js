@@ -111,6 +111,80 @@ async function updateCamera(cam) {
   }
 }
 
+/* ---------- Live device camera ---------- */
+
+const LIVE_INTERVAL_MS = 2500;
+let liveStream = null;
+let liveTimer = null;
+
+async function startLive() {
+  const status = document.getElementById("live-status");
+  if (!navigator.mediaDevices?.getUserMedia) {
+    logEvent("live camera unavailable — needs HTTPS (or localhost)", "warn");
+    alert("Camera access requires HTTPS or localhost. Open this page via the https:// URL.");
+    return;
+  }
+  try {
+    // Rear camera on phones, default webcam on laptops.
+    liveStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 } },
+      audio: false,
+    });
+  } catch (err) {
+    logEvent(`camera permission denied: ${err.name}`, "warn");
+    return;
+  }
+  const video = document.getElementById("live-video");
+  video.srcObject = liveStream;
+  document.getElementById("live-panel").classList.remove("hidden");
+  document.getElementById("live-cta").classList.add("hidden");
+  logEvent("live device camera online", "detection");
+  status.textContent = "analyzing…";
+  liveTimer = setInterval(analyzeLiveFrame, LIVE_INTERVAL_MS);
+}
+
+function stopLive() {
+  clearInterval(liveTimer);
+  liveStream?.getTracks().forEach(t => t.stop());
+  liveStream = null;
+  document.getElementById("live-panel").classList.add("hidden");
+  document.getElementById("live-cta").classList.remove("hidden");
+  logEvent("live device camera stopped");
+}
+
+async function analyzeLiveFrame() {
+  const video = document.getElementById("live-video");
+  if (!liveStream || video.videoWidth === 0) return;
+
+  // Downscale before upload: detection doesn't need full resolution,
+  // and it keeps mobile-network round trips fast.
+  const scale = Math.min(1, 960 / video.videoWidth);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(video.videoWidth * scale);
+  canvas.height = Math.round(video.videoHeight * scale);
+  canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.7));
+  const status = document.getElementById("live-status");
+  try {
+    const res = await fetch("/api/analyze?device=browser", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: blob,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const detections = await res.json();
+    drawBoxes(document.getElementById("live-overlay"), detections);
+    document.getElementById("live-detections").textContent = detections.length
+      ? detections.map(d => `${d.label} ${(d.confidence * 100).toFixed(0)}%`).join("  ·  ")
+      : "no objects detected";
+    status.textContent = `live · ${canvas.width}×${canvas.height}`;
+  } catch (err) {
+    status.textContent = "analyze failed";
+    logEvent(`live analyze failed: ${err.message}`, "warn");
+  }
+}
+
 /* ---------- Stats + refresh loop ---------- */
 
 async function refresh() {
@@ -140,6 +214,8 @@ function tickClock() {
 }
 
 async function init() {
+  document.getElementById("live-btn").addEventListener("click", startLive);
+  document.getElementById("live-stop").addEventListener("click", stopLive);
   tickClock();
   setInterval(tickClock, 1000);
   try {

@@ -34,6 +34,15 @@ public class DetectionStore
         _status[cam.Id] = new CameraStatus(cam.Id, cam.Name, health, prev?.LastSuccess, error);
     }
 
+    /// <summary>Detections from a live device camera — counted in stats, no stored frame.</summary>
+    public void RecordLiveDetections(string deviceId, IReadOnlyList<Detection> detections)
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var d in detections)
+            _history.Enqueue((now, deviceId, d.Label));
+        Trim();
+    }
+
     public FrameResult? GetLatest(string cameraId) => _latest.GetValueOrDefault(cameraId);
 
     public IReadOnlyList<CameraStatus> GetStatuses() => _status.Values.OrderBy(s => s.Id).ToList();

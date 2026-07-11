@@ -36,6 +36,22 @@ app.MapGet("/api/stats", (DetectionStore store, int? minutes) =>
 
 app.MapGet("/api/mode", () => new { mock = !hasVisionKey });
 
+// Live device camera: browser captures a frame, POSTs the JPEG here, gets
+// detections back. 4 MB cap — a downscaled camera frame is well under that.
+app.MapPost("/api/analyze", async (HttpRequest req, IVisionClient vision, DetectionStore store, CancellationToken ct) =>
+{
+    using var ms = new MemoryStream();
+    await req.Body.CopyToAsync(ms, ct);
+    if (ms.Length == 0 || ms.Length > 4_000_000)
+        return Results.BadRequest(new { error = "expected image body up to 4 MB" });
+
+    var detections = await vision.DetectObjectsAsync(ms.ToArray(), ct);
+    var device = req.Query.TryGetValue("device", out var d) && !string.IsNullOrWhiteSpace(d)
+        ? $"live-{d}" : "live-device";
+    store.RecordLiveDetections(device, detections);
+    return Results.Ok(detections);
+});
+
 // Liveness/readiness probe for App Service, load balancers, or uptime monitors.
 // Reports degraded (503) only if every feed is down — one dead camera is an
 // expected condition, not an outage.

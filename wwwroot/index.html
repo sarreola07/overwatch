@@ -40,6 +40,29 @@
     </div>
   </section>
 
+  <section id="live-section">
+    <div id="live-cta">
+      <div>
+        <strong>Try it with your own camera</strong>
+        <p>Stream frames from this device through the detection pipeline. Nothing is stored — frames are analyzed and discarded.</p>
+      </div>
+      <button id="live-btn">▶&nbsp; GO LIVE</button>
+    </div>
+    <div id="live-panel" class="hidden">
+      <div class="cam-header">
+        <span class="health-dot up"></span>
+        <span class="cam-name">This device</span>
+        <span id="live-status" class="cam-age">starting…</span>
+        <button id="live-stop">STOP</button>
+      </div>
+      <div class="frame-wrap">
+        <video id="live-video" autoplay playsinline muted></video>
+        <svg id="live-overlay" class="overlay" preserveAspectRatio="none" viewBox="0 0 1 1"></svg>
+      </div>
+      <div id="live-detections" class="cam-detections"></div>
+    </div>
+  </section>
+
   <div class="layout">
     <main id="cameras"></main>
 
