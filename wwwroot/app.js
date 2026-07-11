@@ -113,7 +113,7 @@ async function updateCamera(cam) {
 
 /* ---------- Live device camera ---------- */
 
-const LIVE_INTERVAL_MS = 2500;
+const LIVE_INTERVAL_MS = 1200;
 let liveStream = null;
 let liveTimer = null;
 let liveFacing = "environment"; // back camera by default; "user" = front
