@@ -172,9 +172,20 @@ function stopLive() {
   logEvent("live device camera stopped");
 }
 
+let liveBusy = false;
+
 async function analyzeLiveFrame() {
   const video = document.getElementById("live-video");
-  if (!liveStream || video.videoWidth === 0) return;
+  if (!liveStream || video.videoWidth === 0 || liveBusy) return;
+  liveBusy = true;
+  try {
+    await analyzeLiveFrameInner(video);
+  } finally {
+    liveBusy = false;
+  }
+}
+
+async function analyzeLiveFrameInner(video) {
 
   // Downscale before upload: detection doesn't need full resolution,
   // and it keeps mobile-network round trips fast.

@@ -13,7 +13,30 @@ public interface IVisionClient
 /// </summary>
 public class AzureVisionClient(HttpClient http, IConfiguration config) : IVisionClient
 {
+    // F0 allows 20 calls/min and throttles bursts. One request at a time with a
+    // minimum gap keeps every caller (fixed cameras + live devices) under the
+    // limit globally instead of each racing the quota.
+    private static readonly SemaphoreSlim Gate = new(1, 1);
+    private static DateTimeOffset _lastCall = DateTimeOffset.MinValue;
+    private static readonly TimeSpan MinGap = TimeSpan.FromSeconds(3.2);
+
     public async Task<IReadOnlyList<Detection>> DetectObjectsAsync(byte[] imageBytes, CancellationToken ct)
+    {
+        await Gate.WaitAsync(ct);
+        try
+        {
+            var wait = _lastCall + MinGap - DateTimeOffset.UtcNow;
+            if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
+            _lastCall = DateTimeOffset.UtcNow;
+            return await CallVisionAsync(imageBytes, ct);
+        }
+        finally
+        {
+            Gate.Release();
+        }
+    }
+
+    private async Task<IReadOnlyList<Detection>> CallVisionAsync(byte[] imageBytes, CancellationToken ct)
     {
         var endpoint = config["Vision:Endpoint"]!.TrimEnd('/');
         var url = $"{endpoint}/computervision/imageanalysis:analyze?api-version=2024-02-01&features=objects";

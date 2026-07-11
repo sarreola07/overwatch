@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Overwatch": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "applicationUrl": "http://0.0.0.0:5170;https://0.0.0.0:5171",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
