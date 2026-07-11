@@ -116,6 +116,17 @@ async function updateCamera(cam) {
 const LIVE_INTERVAL_MS = 2500;
 let liveStream = null;
 let liveTimer = null;
+let liveFacing = "environment"; // back camera by default; "user" = front
+
+async function openStream() {
+  // iOS needs the previous stream fully released before switching cameras.
+  liveStream?.getTracks().forEach(t => t.stop());
+  liveStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: liveFacing, width: { ideal: 1280 } },
+    audio: false,
+  });
+  document.getElementById("live-video").srcObject = liveStream;
+}
 
 async function startLive() {
   const status = document.getElementById("live-status");
@@ -125,22 +136,31 @@ async function startLive() {
     return;
   }
   try {
-    // Rear camera on phones, default webcam on laptops.
-    liveStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment", width: { ideal: 1280 } },
-      audio: false,
-    });
+    await openStream();
   } catch (err) {
     logEvent(`camera permission denied: ${err.name}`, "warn");
     return;
   }
-  const video = document.getElementById("live-video");
-  video.srcObject = liveStream;
   document.getElementById("live-panel").classList.remove("hidden");
   document.getElementById("live-cta").classList.add("hidden");
   logEvent("live device camera online", "detection");
   status.textContent = "analyzing…";
   liveTimer = setInterval(analyzeLiveFrame, LIVE_INTERVAL_MS);
+}
+
+async function flipLive() {
+  if (!liveStream) return;
+  liveFacing = liveFacing === "environment" ? "user" : "environment";
+  try {
+    await openStream();
+    document.getElementById("live-overlay").innerHTML = "";
+    logEvent(`camera switched to ${liveFacing === "user" ? "front" : "back"}`);
+  } catch (err) {
+    // Laptops usually have one camera — flip back rather than dying.
+    liveFacing = liveFacing === "environment" ? "user" : "environment";
+    try { await openStream(); } catch { /* original also gone; STOP still works */ }
+    logEvent(`camera switch failed: ${err.name}`, "warn");
+  }
 }
 
 function stopLive() {
@@ -215,6 +235,7 @@ function tickClock() {
 
 async function init() {
   document.getElementById("live-btn").addEventListener("click", startLive);
+  document.getElementById("live-flip").addEventListener("click", flipLive);
   document.getElementById("live-stop").addEventListener("click", stopLive);
   tickClock();
   setInterval(tickClock, 1000);
