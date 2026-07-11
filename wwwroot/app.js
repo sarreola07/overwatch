@@ -113,7 +113,7 @@ async function updateCamera(cam) {
 
 /* ---------- Live device camera ---------- */
 
-const LIVE_INTERVAL_MS = 1200;
+let liveIntervalMs = 1200; // tightened to 700ms when inference is local
 let liveStream = null;
 let liveTimer = null;
 let liveFacing = "environment"; // back camera by default; "user" = front
@@ -145,7 +145,7 @@ async function startLive() {
   document.getElementById("live-cta").classList.add("hidden");
   logEvent("live device camera online", "detection");
   status.textContent = "analyzing…";
-  liveTimer = setInterval(analyzeLiveFrame, LIVE_INTERVAL_MS);
+  liveTimer = setInterval(analyzeLiveFrame, liveIntervalMs);
 }
 
 async function flipLive() {
@@ -253,9 +253,11 @@ async function init() {
   try {
     const mode = await fetchJson("/api/mode");
     const badge = document.getElementById("mode-badge");
-    badge.textContent = mode.mock ? "MOCK DETECTIONS" : "AZURE AI VISION";
-    badge.classList.add(mode.mock ? "mock" : "live");
-    logEvent(`pipeline online — ${mode.mock ? "mock" : "Azure AI Vision"} mode`, "detection");
+    const labels = { mock: "MOCK DETECTIONS", azure: "AZURE AI VISION", yolo: "LOCAL YOLO · ONNX" };
+    badge.textContent = labels[mode.provider] ?? mode.provider.toUpperCase();
+    badge.classList.add(mode.provider === "mock" ? "mock" : mode.provider === "yolo" ? "yolo" : "live");
+    if (mode.provider === "yolo") liveIntervalMs = 700; // no cloud rate limit
+    logEvent(`pipeline online — ${labels[mode.provider] ?? mode.provider}`, "detection");
   } catch { /* non-fatal */ }
   await refresh();
   setInterval(refresh, REFRESH_MS);

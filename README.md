@@ -1,24 +1,47 @@
-# Overwatch — Cloud Computer Vision over Live Camera Feeds
+# Overwatch — Computer Vision Pipeline over Live Camera Feeds
 
 A miniature ISR-style pipeline built from civilian parts: unreliable public camera
-feeds → cloud object detection → operator dashboard with feed-health monitoring
-and rolling statistics.
+feeds → object detection (cloud API or local GPU) → operator dashboard with
+feed-health monitoring and rolling statistics.
 
-**Stack:** ASP.NET Core 8 (minimal API + BackgroundService) · Azure AI Vision
-(Image Analysis v4.0, free tier) · vanilla JS dashboard · deploys to Azure App
-Service free tier.
+**Stack:** ASP.NET Core 8 (minimal API + BackgroundService) · pluggable detection
+backends (local YOLOv8 via ONNX Runtime/DirectML, Azure AI Vision, mock) ·
+vanilla JS dashboard · deploys to Azure App Service.
 
 ## Architecture
 
 ```
-[Public camera JPEGs] --poll--> [CameraPollingService] --frame--> [Azure AI Vision]
-                                        |                              |
-                                        v                              v
-                                 [DetectionStore] <---- detections + boxes
-                                        |
-                                        v
+[Public camera JPEGs] --poll--> [CameraPollingService] --frame--> [IVisionClient]
+[Phone/laptop camera] --POST /api/analyze ------------------------>    |
+                                        |                    ┌─────────┴─────────┐
+                                        v                    | YoloVisionClient  | local ONNX, GPU
+                                 [DetectionStore] <--------- | AzureVisionClient | cloud API
+                                        |                    | MockVisionClient  | no dependencies
+                                        v                    └───────────────────┘
                         [/api/*] ----> [Dashboard: frames, boxes, health, stats]
 ```
+
+Set `Vision:Provider` in appsettings.json: `yolo` (local inference), `azure`
+(cloud API), `mock`, or `auto` (azure if a key is configured, else mock).
+
+### Local YOLO backend
+
+`Vision:Provider = "yolo"` runs a COCO-pretrained YOLOv8-small ONNX model
+in-process via ONNX Runtime, using the GPU through DirectML (CPU fallback is
+automatic). Measured ~40ms per frame end-to-end on an RTX 4080 SUPER vs
+~500-800ms per Azure API round trip — and no per-call cost or rate limit.
+
+The model file is not committed (43 MB). Download it once:
+
+```powershell
+Invoke-WebRequest -Uri "https://huggingface.co/orirdx/yolov8s-coco-onnx/resolve/main/coco_yolov8s.onnx" -OutFile models\yolov8s.onnx
+```
+
+The client handles the full inference pipeline in C#: letterbox resize to
+640×640, RGB→CHW float tensor, session run, then decoding the [1,84,8400]
+output (4 box coords + 80 COCO class scores per anchor), confidence filtering,
+and non-max suppression. Both YOLOv8 ([1,84,N]) and transposed/v5-style
+([1,N,85]) output layouts are handled.
 
 ## Run it
 
@@ -88,12 +111,14 @@ trading off.
 singleton behind a narrow interface; swapping to Azure Table Storage (history) is
 a drop-in change and the first thing on the roadmap.
 
-**What does this cost at 100 cameras?** At 15s polling: 400 calls/min — past the
-free tier (20/min) and past S1 (10/min per TPS default, raisable). The bottleneck
-is the Vision API, not compute. Options in order: lower cadence per camera,
-motion-gating (only send frames that changed, cheap diff locally), or move
-inference in-house (YOLO in a container on Azure Container Apps) which flips the
-cost from per-call to per-vCPU.
+**What does this cost at 100 cameras?** On the Azure backend at 15s polling:
+400 calls/min — past both the F0 free tier (20/min) and S1 defaults, at $1 per
+1000 calls. That ceiling is why the local YOLO backend exists: same interface,
+~40ms per frame on a consumer GPU, zero marginal cost. The project lived this
+arc for real — F0 429s → S1 (faster but metered) → local ONNX inference — and
+the `IVisionClient` abstraction meant each step was a config change, not a
+rewrite. Cloud deployments without a GPU still use the Azure backend; the
+tradeoff is per-call cost vs owning inference hardware.
 
 ## Roadmap
 

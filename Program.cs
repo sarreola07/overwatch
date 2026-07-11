@@ -10,18 +10,24 @@ builder.Services.AddHttpClient("camera", c => c.Timeout = TimeSpan.FromSeconds(1
 builder.Services.AddHttpClient<AzureVisionClient>();
 builder.Services.AddSingleton<DetectionStore>();
 
-// Mock mode when no Vision key is configured — full pipeline runs with fake detections.
+// Vision provider: "yolo" (local ONNX on GPU/CPU), "azure" (cloud API), "mock",
+// or "auto" — azure when a key is configured, mock otherwise.
 var hasVisionKey = !string.IsNullOrWhiteSpace(builder.Configuration["Vision:Key"]);
-if (hasVisionKey)
-    builder.Services.AddSingleton<IVisionClient>(sp => sp.GetRequiredService<AzureVisionClient>());
-else
-    builder.Services.AddSingleton<IVisionClient, MockVisionClient>();
+var provider = (builder.Configuration["Vision:Provider"] ?? "auto").ToLowerInvariant();
+if (provider == "auto") provider = hasVisionKey ? "azure" : "mock";
+
+builder.Services.AddSingleton<IVisionClient>(sp => provider switch
+{
+    "yolo" => ActivatorUtilities.CreateInstance<YoloVisionClient>(sp),
+    "azure" => sp.GetRequiredService<AzureVisionClient>(),
+    _ => new MockVisionClient(),
+});
 
 builder.Services.AddHostedService<CameraPollingService>();
 
 var app = builder.Build();
 
-app.Logger.LogInformation("Vision mode: {Mode}", hasVisionKey ? "Azure AI Vision" : "MOCK (no Vision:Key configured)");
+app.Logger.LogInformation("Vision provider: {Provider}", provider);
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -34,7 +40,7 @@ app.MapGet("/api/frames/{cameraId}", (string cameraId, DetectionStore store) =>
 app.MapGet("/api/stats", (DetectionStore store, int? minutes) =>
     store.GetStats(TimeSpan.FromMinutes(minutes is > 0 and <= 30 ? minutes.Value : 10)));
 
-app.MapGet("/api/mode", () => new { mock = !hasVisionKey });
+app.MapGet("/api/mode", () => new { provider, mock = provider == "mock" });
 
 // Live device camera: browser captures a frame, POSTs the JPEG here, gets
 // detections back. 4 MB cap — a downscaled camera frame is well under that.

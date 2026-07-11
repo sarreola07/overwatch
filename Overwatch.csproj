@@ -7,4 +7,9 @@
     <UserSecretsId>36f745f4-60a6-42d2-9830-ffaea31a658b</UserSecretsId>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+  </ItemGroup>
+
 </Project>

@@ -1,4 +1,5 @@
 bin/
 obj/
+models/*.onnx
 *.user
 appsettings.Development.json

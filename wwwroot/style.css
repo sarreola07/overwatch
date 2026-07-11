@@ -109,6 +109,7 @@ h1 {
 }
 .badge.mock { border-color: var(--stale); color: var(--stale); background: rgba(240, 180, 41, 0.08); }
 .badge.live { border-color: var(--up); color: var(--up); background: rgba(46, 224, 106, 0.08); }
+.badge.yolo { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 
 /* ---------- Stats ---------- */
 
