@@ -1,12 +1,32 @@
 # Overwatch — Computer Vision Pipeline over Live Camera Feeds
 
-A miniature ISR-style pipeline built from civilian parts: unreliable public camera
-feeds → object detection (cloud API or local GPU) → operator dashboard with
-feed-health monitoring and rolling statistics.
+**Live demo: https://overwatch-sarreola.azurewebsites.net** · MIT licensed · [![build](https://github.com/sarreola07/overwatch/actions/workflows/build.yml/badge.svg)](https://github.com/sarreola07/overwatch/actions)
 
-**Stack:** ASP.NET Core 8 (minimal API + BackgroundService) · pluggable detection
-backends (local YOLOv8 via ONNX Runtime/DirectML, Azure AI Vision, mock) ·
-vanilla JS dashboard · deploys to Azure App Service.
+A miniature ISR-style pipeline built from civilian parts: unreliable public camera
+feeds → object detection (cloud API or local GPU) → realtime operator dashboard
+with feed-health monitoring, rolling statistics, and live device cameras.
+
+**Stack:** ASP.NET Core 8 (minimal API + BackgroundService + SignalR) · pluggable
+detection backends (local YOLOv8 via ONNX Runtime/DirectML, Azure AI Vision, mock)
+· vanilla JS dashboard · Swagger/OpenAPI · deploys to Azure App Service.
+
+## API
+
+Interactive documentation at **`/swagger`** on any running instance.
+
+| Surface | What it does |
+|---|---|
+| `GET /api/cameras` | Health + last-success time for every feed |
+| `GET /api/frames/{id}` | Latest analyzed frame (base64 JPEG) with detections |
+| `GET /api/stats?minutes=10` | Rolling detection counts by label and feed |
+| `POST /api/analyze` | Run any posted JPEG through the pipeline |
+| `GET /healthz` | Liveness probe (503 only if *every* feed is down) |
+| `WS /hubs/detections` | SignalR: `frame`, `feedFault`, `liveDetections` pushed in realtime |
+
+The dashboard is realtime-first with graceful degradation: it renders from
+SignalR pushes the moment a frame is analyzed, keeps a slow 30s safety-net poll
+while the socket is healthy, and automatically falls back to 5s polling if the
+socket drops — the event log announces each transition.
 
 ## Architecture
 

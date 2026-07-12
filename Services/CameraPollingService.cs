@@ -1,14 +1,18 @@
+using Microsoft.AspNetCore.SignalR;
+
 namespace Overwatch.Services;
 
 /// <summary>
-/// Polls each configured camera on an interval, runs detection, records results.
-/// Polling (vs streaming) is a deliberate choice: public DOT cameras only expose
-/// still JPEGs, and the Vision free tier is rate-limited — see README.
+/// Polls each configured camera on an interval, runs detection, records results,
+/// and pushes each result to connected dashboards over SignalR. Polling the
+/// sources (vs streaming) is a deliberate choice: public DOT cameras only expose
+/// still JPEGs, and the Vision backends are rate-limited — see README.
 /// </summary>
 public class CameraPollingService(
     IHttpClientFactory httpFactory,
     IVisionClient vision,
     DetectionStore store,
+    IHubContext<DetectionHub> hub,
     IConfiguration config,
     ILogger<CameraPollingService> logger) : BackgroundService
 {
@@ -34,8 +38,11 @@ public class CameraPollingService(
             var http = httpFactory.CreateClient("camera");
             var bytes = await http.GetByteArrayAsync(cam.ImageUrl, ct);
             var detections = await vision.DetectObjectsAsync(bytes, ct);
-            store.RecordSuccess(cam, new FrameResult(
-                cam.Id, DateTimeOffset.UtcNow, Convert.ToBase64String(bytes), detections));
+            var frame = new FrameResult(
+                cam.Id, DateTimeOffset.UtcNow, Convert.ToBase64String(bytes), detections);
+            store.RecordSuccess(cam, frame);
+            await hub.Clients.All.SendAsync("frame",
+                new { cameraId = cam.Id, capturedAt = frame.CapturedAt, detections }, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -45,6 +52,8 @@ public class CameraPollingService(
         {
             logger.LogWarning("Camera {Id} poll failed: {Error}", cam.Id, ex.Message);
             store.RecordFailure(cam, ex.Message);
+            await hub.Clients.All.SendAsync("feedFault",
+                new { cameraId = cam.Id, error = ex.Message }, CancellationToken.None);
         }
     }
 }

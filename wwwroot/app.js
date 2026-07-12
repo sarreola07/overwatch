@@ -1,5 +1,7 @@
-const REFRESH_MS = 5000;
+const POLL_FALLBACK_MS = 5000;   // polling cadence when the realtime socket is down
+const POLL_IDLE_MS = 30000;      // slow safety-net poll while the socket is healthy
 const MAX_LOG_ENTRIES = 60;
+const CLIENT_ID = Math.random().toString(36).slice(2, 8);
 const cards = new Map();          // cameraId -> DOM refs
 const lastSeen = new Map();       // cameraId -> capturedAt of last logged frame
 const lastHealth = new Map();     // cameraId -> last health string
@@ -200,7 +202,7 @@ async function analyzeLiveFrameInner(video) {
   const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.7));
   const status = document.getElementById("live-status");
   try {
-    const res = await fetch("/api/analyze?device=browser", {
+    const res = await fetch(`/api/analyze?device=browser-${CLIENT_ID}`, {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream" },
       body: blob,
@@ -246,6 +248,57 @@ function tickClock() {
     new Date().toISOString().slice(11, 19) + " UTC";
 }
 
+/* ---------- Realtime (SignalR) with polling fallback ---------- */
+
+let pollTimer = null;
+let refreshQueued = false;
+
+function setPollInterval(ms) {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(refresh, ms);
+}
+
+// Hub events can arrive in bursts; coalesce into one refresh per 400ms.
+function queueRefresh() {
+  if (refreshQueued) return;
+  refreshQueued = true;
+  setTimeout(async () => { refreshQueued = false; await refresh(); }, 400);
+}
+
+async function initRealtime() {
+  if (!window.signalR) return; // client lib missing — polling covers us
+  const conn = new signalR.HubConnectionBuilder()
+    .withUrl("/hubs/detections")
+    .withAutomaticReconnect()
+    .build();
+
+  conn.on("frame", queueRefresh);
+  conn.on("feedFault", queueRefresh);
+  conn.on("liveDetections", m => {
+    if (m.device.includes(CLIENT_ID)) return; // we already logged our own
+    const counts = m.detections.reduce((acc, d) => ((acc[d.label] = (acc[d.label] ?? 0) + 1), acc), {});
+    const summary = Object.entries(counts).map(([l, n]) => (n > 1 ? `${n}× ${l}` : l)).join(", ");
+    logEvent(`${m.device}: ${summary}`, "detection");
+  });
+
+  conn.onreconnecting(() => {
+    logEvent("realtime link degraded — falling back to polling", "warn");
+    setPollInterval(POLL_FALLBACK_MS);
+  });
+  conn.onreconnected(() => {
+    logEvent("realtime link restored", "detection");
+    setPollInterval(POLL_IDLE_MS);
+  });
+
+  try {
+    await conn.start();
+    logEvent("realtime link established", "detection");
+    setPollInterval(POLL_IDLE_MS);
+  } catch {
+    logEvent("realtime link unavailable — polling mode", "warn");
+  }
+}
+
 async function init() {
   // Spotlight border: track the cursor per camera card via CSS vars
   document.getElementById("cameras").addEventListener("mousemove", e => {
@@ -271,7 +324,8 @@ async function init() {
     logEvent(`pipeline online — ${labels[mode.provider] ?? mode.provider}`, "detection");
   } catch { /* non-fatal */ }
   await refresh();
-  setInterval(refresh, REFRESH_MS);
+  setPollInterval(POLL_FALLBACK_MS);
+  await initRealtime();
 }
 
 init();
