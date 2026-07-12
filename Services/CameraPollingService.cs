@@ -35,21 +35,18 @@ public class CameraPollingService(
     {
         try
         {
-            // YouTube live streams resolve to a time-limited HLS manifest; on grab
-            // failure the cached manifest is dropped so the next poll re-resolves.
-            var isYoutube = IsYoutube(cam.ImageUrl);
-            var sourceUrl = isYoutube ? await ResolveYoutubeStreamAsync(cam.ImageUrl, ct) : cam.ImageUrl;
             byte[] bytes;
             try
             {
-                bytes = isYoutube || sourceUrl.Contains(".m3u8", StringComparison.OrdinalIgnoreCase)
-                    ? await GrabHlsFrameAsync(sourceUrl, ct)
-                    : await httpFactory.CreateClient("camera").GetByteArrayAsync(sourceUrl, ct);
+                bytes = await FetchFrameAsync(cam.ImageUrl, ct);
             }
-            catch when (isYoutube)
+            catch (Exception ex) when (ex is not OperationCanceledException && cam.FallbackUrl is not null)
             {
-                _resolvedStreams.TryRemove(cam.ImageUrl, out _);
-                throw;
+                // Primary sensor denied or dead — fail over to the alternate source
+                // rather than taking the feed dark.
+                logger.LogWarning("Camera {Id} primary source failed ({Error}); using fallback source",
+                    cam.Id, ex.Message);
+                bytes = await FetchFrameAsync(cam.FallbackUrl, ct);
             }
             var detections = await vision.DetectObjectsAsync(bytes, ct);
             var frame = new FrameResult(
@@ -68,6 +65,29 @@ public class CameraPollingService(
             store.RecordFailure(cam, ex.Message);
             await hub.Clients.All.SendAsync("feedFault",
                 new { cameraId = cam.Id, error = ex.Message }, CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Fetches one frame from a source URL: YouTube live pages resolve to their
+    /// time-limited HLS manifest first (cache dropped on failure so the next
+    /// poll re-resolves), .m3u8 streams go through ffmpeg, anything else is a
+    /// plain HTTP image GET.
+    /// </summary>
+    private async Task<byte[]> FetchFrameAsync(string url, CancellationToken ct)
+    {
+        var isYoutube = IsYoutube(url);
+        var sourceUrl = isYoutube ? await ResolveYoutubeStreamAsync(url, ct) : url;
+        try
+        {
+            return isYoutube || sourceUrl.Contains(".m3u8", StringComparison.OrdinalIgnoreCase)
+                ? await GrabHlsFrameAsync(sourceUrl, ct)
+                : await httpFactory.CreateClient("camera").GetByteArrayAsync(sourceUrl, ct);
+        }
+        catch when (isYoutube)
+        {
+            _resolvedStreams.TryRemove(url, out _);
+            throw;
         }
     }
 

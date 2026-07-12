@@ -1,6 +1,6 @@
 namespace Overwatch;
 
-public record CameraConfig(string Id, string Name, string ImageUrl);
+public record CameraConfig(string Id, string Name, string ImageUrl, string? FallbackUrl = null);
 
 public enum FeedHealth { Up, Stale, Down }
 
