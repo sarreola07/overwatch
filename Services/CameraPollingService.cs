@@ -35,8 +35,9 @@ public class CameraPollingService(
     {
         try
         {
-            var http = httpFactory.CreateClient("camera");
-            var bytes = await http.GetByteArrayAsync(cam.ImageUrl, ct);
+            var bytes = cam.ImageUrl.Contains(".m3u8", StringComparison.OrdinalIgnoreCase)
+                ? await GrabHlsFrameAsync(cam.ImageUrl, ct)
+                : await httpFactory.CreateClient("camera").GetByteArrayAsync(cam.ImageUrl, ct);
             var detections = await vision.DetectObjectsAsync(bytes, ct);
             var frame = new FrameResult(
                 cam.Id, DateTimeOffset.UtcNow, Convert.ToBase64String(bytes), detections);
@@ -54,6 +55,46 @@ public class CameraPollingService(
             store.RecordFailure(cam, ex.Message);
             await hub.Clients.All.SendAsync("feedFault",
                 new { cameraId = cam.Id, error = ex.Message }, CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Pulls a single keyframe from an HLS video stream as JPEG via ffmpeg.
+    /// -skip_frame nokey avoids "no frame" failures when the playlist position
+    /// lands mid-GOP. The whole grab is capped at 25s so a stalled stream
+    /// degrades the feed instead of wedging the poll loop.
+    /// </summary>
+    private async Task<byte[]> GrabHlsFrameAsync(string url, CancellationToken ct)
+    {
+        var ffmpeg = config["Ffmpeg:Path"] ?? "ffmpeg";
+        var psi = new System.Diagnostics.ProcessStartInfo(ffmpeg,
+            $"-loglevel error -skip_frame nokey -i \"{url}\" -frames:v 1 -q:v 4 -f image2pipe -vcodec mjpeg -")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(25));
+        using var proc = System.Diagnostics.Process.Start(psi)
+            ?? throw new InvalidOperationException($"failed to start ffmpeg at '{ffmpeg}'");
+        try
+        {
+            using var ms = new MemoryStream();
+            var copy = proc.StandardOutput.BaseStream.CopyToAsync(ms, timeout.Token);
+            var err = proc.StandardError.ReadToEndAsync(timeout.Token);
+            await proc.WaitForExitAsync(timeout.Token);
+            await copy;
+            if (proc.ExitCode != 0 || ms.Length == 0)
+                throw new InvalidOperationException(
+                    $"ffmpeg exit {proc.ExitCode}: {(await err).Split('\n').FirstOrDefault()?.Trim()}");
+            return ms.ToArray();
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { /* already gone */ }
+            throw new TimeoutException("HLS frame grab timed out after 25s");
         }
     }
 }
