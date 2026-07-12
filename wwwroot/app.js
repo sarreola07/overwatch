@@ -80,6 +80,8 @@ function trackHealthChange(cam) {
   lastHealth.set(cam.id, cam.health);
 }
 
+const lastFetched = new Map(); // cameraId -> lastSuccess we already downloaded
+
 async function updateCamera(cam) {
   const card = getCard(cam);
   card.dot.className = "health-dot " + cam.health.toLowerCase();
@@ -91,8 +93,12 @@ async function updateCamera(cam) {
     card.detections.textContent = cam.lastError ?? "feed unreachable";
     return;
   }
+  // Frames are the heavy payload (~50-100KB each). Skip the download unless
+  // the server actually has a newer frame than the one we're showing.
+  if (lastFetched.get(cam.id) === cam.lastSuccess) return;
   try {
     const frame = await fetchJson(`/api/frames/${cam.id}`);
+    lastFetched.set(cam.id, cam.lastSuccess);
     card.img.src = `data:image/jpeg;base64,${frame.imageBase64}`;
     card.acquiring.classList.add("hidden");
     drawBoxes(card.overlay, frame.detections);

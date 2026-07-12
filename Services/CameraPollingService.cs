@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
 
 namespace Overwatch.Services;
 
@@ -49,8 +51,11 @@ public class CameraPollingService(
                 bytes = await FetchFrameAsync(cam.FallbackUrl, ct);
             }
             var detections = await vision.DetectObjectsAsync(bytes, ct);
+            // Detection runs on the full-resolution frame; the stored copy is for
+            // display only, so downscale it — a 1080p frame is ~375KB of base64
+            // that every dashboard would otherwise re-download each refresh.
             var frame = new FrameResult(
-                cam.Id, DateTimeOffset.UtcNow, Convert.ToBase64String(bytes), detections);
+                cam.Id, DateTimeOffset.UtcNow, Convert.ToBase64String(ToDisplayJpeg(bytes)), detections);
             store.RecordSuccess(cam, frame);
             await hub.Clients.All.SendAsync("frame",
                 new { cameraId = cam.Id, capturedAt = frame.CapturedAt, detections }, ct);
@@ -66,6 +71,16 @@ public class CameraPollingService(
             await hub.Clients.All.SendAsync("feedFault",
                 new { cameraId = cam.Id, error = ex.Message }, CancellationToken.None);
         }
+    }
+
+    private static byte[] ToDisplayJpeg(byte[] original)
+    {
+        using var image = SixLabors.ImageSharp.Image.Load(original);
+        if (image.Width <= 960) return original;
+        image.Mutate(x => x.Resize(960, 0));
+        using var ms = new MemoryStream();
+        image.SaveAsJpeg(ms, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder { Quality = 74 });
+        return ms.ToArray();
     }
 
     /// <summary>
