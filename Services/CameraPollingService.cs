@@ -22,15 +22,32 @@ public class CameraPollingService(
     {
         var cameras = config.GetSection("Cameras").Get<List<CameraConfig>>() ?? [];
         var interval = TimeSpan.FromSeconds(config.GetValue("PollIntervalSeconds", 15));
-        logger.LogInformation("Polling {Count} cameras every {Interval}s", cameras.Count, interval.TotalSeconds);
+        logger.LogInformation("Polling {Count} cameras every {Interval}s, staggered",
+            cameras.Count, interval.TotalSeconds);
 
-        using var timer = new PeriodicTimer(interval);
-        do
+        // Each camera runs its own loop, offset across the interval so updates
+        // arrive as a rolling cadence instead of one burst per cycle — the
+        // dashboard is always moving, and ffmpeg grabs never pile up together.
+        await Task.WhenAll(cameras.Select((cam, i) =>
+            RunCameraLoopAsync(cam, interval, interval * i / cameras.Count, ct)));
+    }
+
+    private async Task RunCameraLoopAsync(CameraConfig cam, TimeSpan interval, TimeSpan offset, CancellationToken ct)
+    {
+        try
         {
-            // Cameras are independent; one dead feed must never block the others.
-            await Task.WhenAll(cameras.Select(cam => PollOneAsync(cam, ct)));
+            if (offset > TimeSpan.Zero) await Task.Delay(offset, ct);
+            using var timer = new PeriodicTimer(interval);
+            do
+            {
+                await PollOneAsync(cam, ct);
+            }
+            while (await timer.WaitForNextTickAsync(ct));
         }
-        while (await timer.WaitForNextTickAsync(ct));
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // shutdown
+        }
     }
 
     private async Task PollOneAsync(CameraConfig cam, CancellationToken ct)
