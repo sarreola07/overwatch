@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Overwatch — Cloud CV Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -13,10 +13,10 @@
 
   <header>
     <div class="brand">
-      <div class="brand-mark" aria-hidden="true"></div>
+      <div class="brand-mark" aria-hidden="true"><span class="sweep"></span></div>
       <div>
         <h1>OVERWATCH</h1>
-        <span class="subtitle">Cloud computer-vision pipeline</span>
+        <span class="subtitle">COMPUTER VISION · LIVE FEED CONSOLE</span>
       </div>
     </div>
     <div class="header-right">
@@ -27,15 +27,15 @@
 
   <section id="stats-bar">
     <div class="stat-tile">
+      <span class="stat-eyebrow">DET / 10 MIN</span>
       <span class="stat-value" id="stat-total">–</span>
-      <span class="stat-label">Detections · 10 min</span>
     </div>
     <div class="stat-tile">
+      <span class="stat-eyebrow">FEEDS UP</span>
       <span class="stat-value" id="stat-cams-up">–</span>
-      <span class="stat-label">Feeds operational</span>
     </div>
     <div class="stat-tile wide">
-      <span class="stat-label">By object class</span>
+      <span class="stat-eyebrow">OBJECT CLASSES</span>
       <div id="stat-labels" class="stat-labels"></div>
     </div>
   </section>
@@ -43,10 +43,11 @@
   <section id="live-section">
     <div id="live-cta">
       <div>
-        <strong>Try it with your own camera</strong>
-        <p>Stream frames from this device through the detection pipeline. Nothing is stored — frames are analyzed and discarded.</p>
+        <span class="eyebrow">SELF-TEST</span>
+        <strong>Run the pipeline on your own camera</strong>
+        <p>Frames stream from this device, are analyzed, and discarded. Nothing is stored.</p>
       </div>
-      <button id="live-btn">▶&nbsp; GO LIVE</button>
+      <button id="live-btn">GO LIVE</button>
     </div>
     <div id="live-panel" class="hidden">
       <div class="cam-header">
@@ -68,7 +69,7 @@
     <main id="cameras"></main>
 
     <aside id="event-log">
-      <div class="log-header">EVENT LOG</div>
+      <div class="log-header"><span class="eyebrow">LOG</span> EVENT STREAM</div>
       <ul id="log-entries"></ul>
     </aside>
   </div>
