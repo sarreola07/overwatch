@@ -35,9 +35,22 @@ public class CameraPollingService(
     {
         try
         {
-            var bytes = cam.ImageUrl.Contains(".m3u8", StringComparison.OrdinalIgnoreCase)
-                ? await GrabHlsFrameAsync(cam.ImageUrl, ct)
-                : await httpFactory.CreateClient("camera").GetByteArrayAsync(cam.ImageUrl, ct);
+            // YouTube live streams resolve to a time-limited HLS manifest; on grab
+            // failure the cached manifest is dropped so the next poll re-resolves.
+            var isYoutube = IsYoutube(cam.ImageUrl);
+            var sourceUrl = isYoutube ? await ResolveYoutubeStreamAsync(cam.ImageUrl, ct) : cam.ImageUrl;
+            byte[] bytes;
+            try
+            {
+                bytes = isYoutube || sourceUrl.Contains(".m3u8", StringComparison.OrdinalIgnoreCase)
+                    ? await GrabHlsFrameAsync(sourceUrl, ct)
+                    : await httpFactory.CreateClient("camera").GetByteArrayAsync(sourceUrl, ct);
+            }
+            catch when (isYoutube)
+            {
+                _resolvedStreams.TryRemove(cam.ImageUrl, out _);
+                throw;
+            }
             var detections = await vision.DetectObjectsAsync(bytes, ct);
             var frame = new FrameResult(
                 cam.Id, DateTimeOffset.UtcNow, Convert.ToBase64String(bytes), detections);
@@ -55,6 +68,53 @@ public class CameraPollingService(
             store.RecordFailure(cam, ex.Message);
             await hub.Clients.All.SendAsync("feedFault",
                 new { cameraId = cam.Id, error = ex.Message }, CancellationToken.None);
+        }
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string Url, DateTimeOffset At)> _resolvedStreams = new();
+    private static readonly TimeSpan ResolveTtl = TimeSpan.FromHours(4);
+
+    private static bool IsYoutube(string url) =>
+        url.Contains("youtube.com", StringComparison.OrdinalIgnoreCase) ||
+        url.Contains("youtu.be", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Resolves a YouTube live URL to its current HLS manifest via yt-dlp.
+    /// Manifests expire after ~6h, so results are cached for 4 and invalidated
+    /// early if a frame grab fails.
+    /// </summary>
+    private async Task<string> ResolveYoutubeStreamAsync(string url, CancellationToken ct)
+    {
+        if (_resolvedStreams.TryGetValue(url, out var hit) && DateTimeOffset.UtcNow - hit.At < ResolveTtl)
+            return hit.Url;
+
+        var ytdlp = config["YtDlp:Path"] ?? "yt-dlp";
+        var psi = new System.Diagnostics.ProcessStartInfo(ytdlp, $"-g --no-warnings \"{url}\"")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(45));
+        using var proc = System.Diagnostics.Process.Start(psi)
+            ?? throw new InvalidOperationException($"failed to start yt-dlp at '{ytdlp}'");
+        try
+        {
+            var stdout = proc.StandardOutput.ReadToEndAsync(timeout.Token);
+            var stderr = proc.StandardError.ReadToEndAsync(timeout.Token);
+            await proc.WaitForExitAsync(timeout.Token);
+            var resolved = (await stdout).Split('\n').FirstOrDefault()?.Trim();
+            if (proc.ExitCode != 0 || string.IsNullOrEmpty(resolved))
+                throw new InvalidOperationException(
+                    $"yt-dlp exit {proc.ExitCode}: {(await stderr).Split('\n').FirstOrDefault()?.Trim()}");
+            _resolvedStreams[url] = (resolved, DateTimeOffset.UtcNow);
+            return resolved;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { /* already gone */ }
+            throw new TimeoutException("YouTube stream resolution timed out after 45s");
         }
     }
 
