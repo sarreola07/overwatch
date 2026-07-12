@@ -36,6 +36,7 @@ function getCard(cam) {
     age: node.querySelector(".cam-age"),
     img: node.querySelector(".frame"),
     overlay: node.querySelector(".overlay"),
+    acquiring: node.querySelector(".acquiring"),
     noSignal: node.querySelector(".no-signal"),
     detections: node.querySelector(".cam-detections"),
   };
@@ -91,6 +92,7 @@ async function updateCamera(cam) {
   try {
     const frame = await fetchJson(`/api/frames/${cam.id}`);
     card.img.src = `data:image/jpeg;base64,${frame.imageBase64}`;
+    card.acquiring.classList.add("hidden");
     drawBoxes(card.overlay, frame.detections);
     card.detections.textContent = frame.detections.length
       ? frame.detections.map(d => `${d.label} ${(d.confidence * 100).toFixed(0)}%`).join("  ·  ")
@@ -245,6 +247,15 @@ function tickClock() {
 }
 
 async function init() {
+  // Spotlight border: track the cursor per camera card via CSS vars
+  document.getElementById("cameras").addEventListener("mousemove", e => {
+    const card = e.target.closest(".camera");
+    if (!card) return;
+    const r = card.getBoundingClientRect();
+    card.style.setProperty("--mx", `${e.clientX - r.left}px`);
+    card.style.setProperty("--my", `${e.clientY - r.top}px`);
+  });
+
   document.getElementById("live-btn").addEventListener("click", startLive);
   document.getElementById("live-flip").addEventListener("click", flipLive);
   document.getElementById("live-stop").addEventListener("click", stopLive);

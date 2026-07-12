@@ -3,12 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Overwatch — Cloud CV Dashboard</title>
+  <meta name="description" content="Overwatch — a live computer-vision pipeline: camera feeds run through local YOLOv8 or Azure AI Vision, with an operator console for detections, feed health, and live device cameras." />
+  <meta name="theme-color" content="#0A0E16" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%23FFB454' stroke-width='2.5'/%3E%3Cpath d='M16 16L26 9' stroke='%23FFB454' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='3.5' fill='%23FFB454'/%3E%3C/svg%3E" />
+  <title>Overwatch — Live CV Operator Console</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=3" />
 </head>
 <body>
+  <a class="skip-link" href="#cameras">Skip to feeds</a>
   <div class="bg-grid" aria-hidden="true"></div>
 
   <header>
@@ -25,6 +29,7 @@
     </div>
   </header>
 
+  <div class="shell">
   <section id="stats-bar">
     <div class="stat-tile">
       <span class="stat-eyebrow">DET / 10 MIN</span>
@@ -74,6 +79,13 @@
     </aside>
   </div>
 
+  <footer>
+    <span class="foot-brand">OVERWATCH</span>
+    <span>Built by Sergio Arreola — ASP.NET Core 8 · YOLOv8 / ONNX Runtime · Azure AI Vision · Azure App Service</span>
+    <a href="https://github.com/sarreola07/overwatch" rel="noopener">Source on GitHub</a>
+  </footer>
+  </div>
+
   <template id="camera-template">
     <article class="camera">
       <div class="cam-header">
@@ -82,14 +94,15 @@
         <span class="cam-age"></span>
       </div>
       <div class="frame-wrap">
-        <img class="frame" alt="camera frame" />
+        <img class="frame" alt="latest analyzed frame from this feed" />
         <svg class="overlay" preserveAspectRatio="none" viewBox="0 0 1 1"></svg>
+        <div class="acquiring"><span>ACQUIRING SIGNAL</span></div>
         <div class="no-signal hidden"><span>NO SIGNAL</span></div>
       </div>
       <div class="cam-detections"></div>
     </article>
   </template>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>

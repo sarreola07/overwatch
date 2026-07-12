@@ -44,6 +44,39 @@ body {
     linear-gradient(90deg, rgba(49, 65, 95, 0.10) 1px, transparent 1px);
   background-size: auto, 40px 40px, 40px 40px;
 }
+/* Grain: breaks digital flatness without reading as dirt */
+.bg-grid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  pointer-events: none;
+}
+
+/* Content shell: stop edge-to-edge stretch on wide monitors */
+.shell { max-width: 1520px; margin: 0 auto; }
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  z-index: 100;
+  padding: 0.6rem 1rem;
+  background: var(--amber);
+  color: #131108;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+.skip-link:focus { left: 0; }
+
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+button { touch-action: manipulation; }
+button:active { transform: scale(0.98); }
 
 .eyebrow {
   display: block;
@@ -164,6 +197,7 @@ h1 {
 .stat-value {
   display: block;
   font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
   font-size: 2.1rem;
   font-weight: 600;
   line-height: 1;
@@ -260,7 +294,7 @@ h1 {
 
 main {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 1rem;
 }
 
@@ -270,7 +304,38 @@ main {
   background: var(--panel);
   border: 1px solid var(--line);
   transition: border-color 0.2s;
+  position: relative;
+  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+/* Staggered entry: feeds report in one after another */
+.camera:nth-child(1) { animation-delay: 0.05s; }
+.camera:nth-child(2) { animation-delay: 0.14s; }
+.camera:nth-child(3) { animation-delay: 0.23s; }
+.camera:nth-child(4) { animation-delay: 0.32s; }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Primary feed dominates; the rest fall in beside it */
+@media (min-width: 1120px) {
+  .camera:first-child { grid-column: span 2; }
+}
+
+/* Spotlight border: illuminates under the cursor (JS sets --mx/--my) */
+.camera::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 0;
+  background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 180, 84, 0.35), transparent 65%);
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+.camera:hover::before { opacity: 1; }
+.camera > * { position: relative; z-index: 1; background: var(--panel); }
 .camera:hover { border-color: var(--line-bright); }
 
 .cam-header {
@@ -343,6 +408,24 @@ main {
   stroke: rgba(6, 9, 16, 0.9);
   stroke-width: 0.006;
 }
+
+/* Loading state: shimmer + label until the first frame lands */
+.frame:not([src]) { display: none; }
+.acquiring {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(100deg, var(--bg-deep) 40%, #0E1522 50%, var(--bg-deep) 60%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s linear infinite;
+}
+.acquiring span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.35em;
+  animation: blink 2s steps(2) infinite;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
 
 .no-signal {
   position: absolute; inset: 0;
@@ -417,6 +500,33 @@ main {
   from { opacity: 0; transform: translateX(-6px); }
   to { opacity: 1; transform: none; }
 }
+
+/* ---------- Footer ---------- */
+
+footer {
+  display: flex;
+  align-items: baseline;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  margin: 0 1.6rem;
+  padding: 1.1rem 0 1.6rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.foot-brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--ink);
+}
+footer a {
+  color: var(--amber);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255, 180, 84, 0.35);
+  margin-left: auto;
+}
+footer a:hover { border-bottom-color: var(--amber); }
 
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--line-bright); }
