@@ -10,6 +10,20 @@ with feed-health monitoring, rolling statistics, and live device cameras.
 detection backends (local YOLOv8 via ONNX Runtime/DirectML, Azure AI Vision, mock)
 · vanilla JS dashboard · Swagger/OpenAPI · deploys to Azure App Service.
 
+## Screenshots
+
+**Six live feeds, one dashboard** — border-crossing cameras, NYC traffic cameras, and a phone/laptop camera all running through the same pipeline at once:
+
+![NYC and border feeds detecting cars, trucks, and pedestrians in real time](docs/screenshots/01-nyc-multi-feed-grid.jpg)
+
+**GO LIVE — visitor's own camera through the pipeline**, running local YOLOv8 on-device inference (laptop, keyboard, mouse, monitors all detected), alongside the border-crossing feeds:
+
+![Live device camera detecting a desk setup via local YOLOv8](docs/screenshots/02-go-live-device-camera.jpg)
+
+**The deployed Azure site**, switched to the Azure AI Vision backend — same UI, same live feeds, different inference provider selected via config:
+
+![Deployed Azure App Service instance using Azure AI Vision for detection](docs/screenshots/03-azure-vision-deployed.jpg)
+
 ## API
 
 Interactive documentation at **`/swagger`** on any running instance.
